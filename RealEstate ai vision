@@ -1,0 +1,190 @@
+import React, { useState } from 'react';
+import { ImageUploader } from './components/ImageUploader';
+import { ResultViewer } from './components/ResultViewer';
+import { Button } from './components/Button';
+import { PRESET_PROMPTS } from './constants';
+import { generateRealEstateSolution } from './services/geminiService';
+import { ImageFile, GenerationState, PresetPrompt } from './types';
+
+export default function App() {
+  const [selectedImage, setSelectedImage] = useState<ImageFile | null>(null);
+  const [selectedPreset, setSelectedPreset] = useState<PresetPrompt | null>(PRESET_PROMPTS[0]);
+  const [customInstructions, setCustomInstructions] = useState('');
+  const [generationState, setGenerationState] = useState<GenerationState>({ status: 'idle' });
+  const [resultBase64, setResultBase64] = useState<string | null>(null);
+
+  const handleGenerate = async () => {
+    if (!selectedImage) return;
+
+    setGenerationState({ status: 'generating' });
+    setResultBase64(null);
+
+    try {
+      const basePrompt = selectedPreset ? selectedPreset.prompt : "Redesign this room to look high-end and beautiful.";
+      
+      const result = await generateRealEstateSolution({
+        imageBase64: selectedImage.base64,
+        mimeType: selectedImage.mimeType,
+        prompt: basePrompt,
+        customInstructions: customInstructions
+      });
+
+      setResultBase64(result);
+      setGenerationState({ status: 'success' });
+    } catch (error: any) {
+      setGenerationState({ 
+        status: 'error', 
+        errorMessage: error.message || "Something went wrong during generation." 
+      });
+    }
+  };
+
+  const handleDownload = () => {
+    if (resultBase64) {
+      const link = document.createElement('a');
+      link.href = `data:image/png;base64,${resultBase64}`;
+      link.download = `real-estate-vision-${Date.now()}.png`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+  };
+
+  const handleReset = () => {
+    setSelectedImage(null);
+    setResultBase64(null);
+    setGenerationState({ status: 'idle' });
+    setCustomInstructions('');
+  };
+
+  return (
+    <div className="min-h-screen bg-slate-50 pb-20">
+      {/* Header */}
+      <header className="bg-white border-b border-slate-200 sticky top-0 z-50">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white font-bold">
+              R
+            </div>
+            <h1 className="text-xl font-bold text-slate-900 tracking-tight">RealEstate AI Vision</h1>
+          </div>
+          <div className="text-sm text-slate-500 hidden sm:block">
+            Powered by Gemini 2.5
+          </div>
+        </div>
+      </header>
+
+      <main className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+        
+        {/* Intro */}
+        <div className="text-center mb-10 max-w-2xl mx-auto">
+          <h2 className="text-3xl font-bold text-slate-900 mb-4">
+            Reimagine Any Space Instantly
+          </h2>
+          <p className="text-slate-600 text-lg">
+            Upload a photo of a room or property, choose a style, and let our AI redesign it in seconds. Perfect for virtual staging and renovation ideas.
+          </p>
+        </div>
+
+        {/* Error Message */}
+        {generationState.status === 'error' && (
+          <div className="mb-8 bg-red-50 border-l-4 border-red-500 p-4 rounded-md flex items-start gap-3">
+             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6 text-red-500 flex-shrink-0">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008h-.008v-.008z" />
+              </svg>
+            <div>
+              <p className="font-medium text-red-800">Generation Failed</p>
+              <p className="text-red-700 text-sm mt-1">{generationState.errorMessage}</p>
+            </div>
+          </div>
+        )}
+
+        {/* Main Content Area */}
+        {generationState.status === 'success' && resultBase64 && selectedImage ? (
+          <ResultViewer 
+            originalImage={selectedImage.previewUrl}
+            generatedImageBase64={resultBase64}
+            onClose={handleReset}
+            onDownload={handleDownload}
+          />
+        ) : (
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+            
+            {/* Left Column: Upload */}
+            <div className="lg:col-span-7 space-y-4">
+              <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                <h3 className="text-lg font-semibold text-slate-800 mb-4">1. Upload Image</h3>
+                <ImageUploader 
+                  selectedImage={selectedImage} 
+                  onImageSelect={(img) => {
+                    setSelectedImage(img);
+                    setGenerationState({ status: 'idle' });
+                  }} 
+                />
+              </div>
+            </div>
+
+            {/* Right Column: Controls */}
+            <div className="lg:col-span-5 space-y-4">
+               <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 sticky top-24">
+                  <h3 className="text-lg font-semibold text-slate-800 mb-4">2. Choose Style</h3>
+                  
+                  <div className="grid grid-cols-1 gap-3 mb-6">
+                    {PRESET_PROMPTS.map((preset) => (
+                      <button
+                        key={preset.id}
+                        onClick={() => setSelectedPreset(preset)}
+                        className={`text-left p-3 rounded-xl border transition-all duration-200 flex items-start gap-3
+                          ${selectedPreset?.id === preset.id 
+                            ? 'border-indigo-600 bg-indigo-50 ring-1 ring-indigo-600' 
+                            : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'
+                          }`}
+                      >
+                        <span className="text-2xl pt-1">{preset.icon}</span>
+                        <div>
+                          <div className={`font-medium ${selectedPreset?.id === preset.id ? 'text-indigo-900' : 'text-slate-700'}`}>
+                            {preset.label}
+                          </div>
+                          <div className="text-xs text-slate-500 mt-1 line-clamp-2">
+                            {preset.description}
+                          </div>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="mb-6">
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                      Additional Instructions (Optional)
+                    </label>
+                    <textarea
+                      value={customInstructions}
+                      onChange={(e) => setCustomInstructions(e.target.value)}
+                      placeholder="e.g. Make the walls blue, add a large mirror..."
+                      className="w-full rounded-lg border-slate-300 border p-3 text-sm focus:ring-indigo-500 focus:border-indigo-500 transition-shadow"
+                      rows={3}
+                    />
+                  </div>
+
+                  <Button 
+                    className="w-full py-3 text-lg" 
+                    onClick={handleGenerate}
+                    disabled={!selectedImage}
+                    isLoading={generationState.status === 'generating'}
+                  >
+                    {generationState.status === 'generating' ? 'Redesigning Space...' : 'Generate Redesign'}
+                  </Button>
+                  
+                  {!selectedImage && (
+                    <p className="text-center text-xs text-slate-400 mt-3">
+                      Please upload an image first to enable generation.
+                    </p>
+                  )}
+               </div>
+            </div>
+          </div>
+        )}
+      </main>
+    </div>
+  );
+}
